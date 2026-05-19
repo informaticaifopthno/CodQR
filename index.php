@@ -77,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Si la pestaña actual es la 'lista', obtenemos todos los registros de TiDB
 $todosLosRegistros = [];
 if ($tab === 'lista' && !$esVistaPublica) {
-    $stmt = $pdo->query("SELECT * FROM registros_qr ORDER BY actualizado_el DESC");
+    $stmt = $pdo->query("SELECT * FROM registros_qr");
     $todosLosRegistros = $stmt->fetchAll();
 }
 ?>
@@ -112,7 +112,6 @@ if ($tab === 'lista' && !$esVistaPublica) {
             <div class="vista-cliente">
                 <h1><?php echo htmlspecialchars($registro['titulo']); ?></h1>
                 <div class="contenido-texto"><?php echo htmlspecialchars($registro['contenido']); ?></div>
-                <div class="fecha">📅 Actualizado el: <?php echo date('d/m/Y H:i', strtotime($registro['actualizado_el'])); ?></div>
             </div>
         <?php else: ?>
             <p style="color: red; text-align: center; margin-top: 50px;">⚠️ El código QR escaneado no pertenece a un registro válido.</p>
@@ -178,7 +177,6 @@ if ($tab === 'lista' && !$esVistaPublica) {
                             <th>ID</th>
                             <th>Título</th>
                             <th>QR (Escanear / Probar)</th>
-                            <th>Última Modificación</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>
