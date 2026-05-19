@@ -77,43 +77,107 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema QR Dinámico con TiDB</title>
+    <title><?php echo $registro ? htmlspecialchars($registro['titulo']) : 'Sistema QR'; ?></title>
+    <!-- Usamos un framework CSS minimalista y limpio -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
+    <style>
+        .vista-publica {
+            background: var(--background-alt);
+            border-left: 5px solid #0076ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .contenido-texto {
+            white-space: pre-wrap; /* Respeta los saltos de línea del usuario */
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+        .meta-fecha {
+            font-size: 0.85rem;
+            color: #888;
+            margin-top: 20px;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+        }
+        .badge-qr {
+            display: inline-block;
+            background: #e1f5fe;
+            color: #0288d1;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+    </style>
 </head>
 <body>
-    <h1>Generador de QR Dinámico</h1>
-    <a href="index.php">➕ Crear Nuevo Registro</a>
-    <hr>
 
-    <?php if (isset($_GET['id']) && !$registro): ?>
-        <p style="color: red;">⚠️ El registro no existe.</p>
-    <?php endif; ?>
-
-    <!-- FORMULARIO DE CREACIÓN / EDICIÓN -->
-    <h2><?php echo $registro ? '📝 Editar Registro #' . $registro['id'] : '📥 Crear Nuevo Registro'; ?></h2>
-    <form action="index.php" method="POST">
-        <?php if ($registro): ?>
-            <input type="hidden" name="id" value="<?php echo $registro['id']; ?>">
-        <?php endif; ?>
+    <!-- CASO 1: VISTA PÚBLICA (El usuario escaneó el QR desde el celular) -->
+    <!-- Detectamos si se pasó un ID por la URL y si no hay intenciones de editar en POST -->
+    <?php if (isset($_GET['id']) && $registro && $_SERVER['REQUEST_METHOD'] !== 'POST'): ?>
         
-        <label>Título:</label>
-        <input type="text" name="titulo" required value="<?php echo $registro ? htmlspecialchars($registro['titulo']) : ''; ?>">
-        
-        <label>Contenido / Texto:</label>
-        <textarea name="contenido" rows="5" required><?php echo $registro ? htmlspecialchars($registro['contenido']) : ''; ?></textarea>
-        
-        <button type="submit"><?php echo $registro ? 'Actualizar Datos' : 'Guardar y Generar QR'; ?></button>
-    </form>
-
-    <!-- VISUALIZACIÓN DEL QR GENERADO -->
-    <?php if ($registro && $qrImage): ?>
-        <hr>
-        <div style="text-align: center; margin-top: 20px;">
-            <h2>Código QR Generado</h2>
-            <img src="<?php echo $qrImage; ?>" alt="Código QR" style="border: 1px solid #ccc; padding: 10px; background: white;">
-            <p><strong>Enlace del QR:</strong> <a href="<?php echo $urlQr; ?>" target="_blank"><?php echo $urlQr; ?></a></p>
-            <p><em>Escanea este código. Si modificas el texto de arriba y guardas, el QR seguirá siendo el mismo pero mostrará los nuevos cambios.</em></p>
+        <div class="vista-publica">
+            <span class="badge-qr">📱 Información Escaneada</span>
+            <h1><?php echo htmlspecialchars($registro['titulo']); ?></h1>
+            
+            <div class="contenido-texto">
+                <?php echo htmlspecialchars($registro['contenido']); ?>
+            </div>
+            
+            <div class="meta-fecha">
+                📅 <strong>Última actualización:</strong> <?php echo date('d/m/Y H:i', strtotime($registro['actualizado_el'])); ?>
+            </div>
         </div>
+
+        <p style="text-align: center; margin-top: 40px;">
+            <a href="index.php?id=<?php echo $registro['id']; ?>&admin=1" style="font-size: 0.85rem; color: #888;">🔧 Administrar este registro</a>
+        </p>
+
+    <!-- CASO 2: VISTA DE ADMINISTRACIÓN (Formulario para crear o editar) -->
+    <!-- Se muestra si no hay ID en la URL, o si explícitamente se pide el modo administrador (?admin=1) -->
+    <?php else: ?>
+
+        <h1>Panel de Control - QR Dinámico</h1>
+        <p><a href="index.php">➕ Crear Nuevo Registro Completo</a></p>
+        <hr>
+
+        <?php if (isset($_GET['id']) && !$registro): ?>
+            <p style="color: red;">⚠️ El registro solicitado no existe.</p>
+        <?php endif; ?>
+
+        <h2><?php echo $registro ? '📝 Editar Registro #' . $registro['id'] : '📥 Crear Nuevo Registro'; ?></h2>
+        
+        <form action="index.php" method="POST">
+            <?php if ($registro): ?>
+                <input type="hidden" name="id" value="<?php echo $registro['id']; ?>">
+            <?php endif; ?>
+            
+            <label>Título del documento:</label>
+            <input type="text" name="titulo" required value="<?php echo $registro ? htmlspecialchars($registro['titulo']) : ''; ?>" placeholder="Ej: Menú del día, Ficha Técnica, Instrucciones...">
+            
+            <label>Contenido / Texto a mostrar:</label>
+            <textarea name="contenido" rows="8" required placeholder="Escribe aquí toda la información que verá el usuario al escanear el QR..." ><?php echo $registro ? htmlspecialchars($registro['contenido']) : ''; ?></textarea>
+            
+            <button type="submit"><?php echo $registro ? 'Guardar Cambios Actualizados' : 'Guardar y Generar QR'; ?></button>
+        </form>
+
+        <!-- PANEL DEL QR (Solo visible en modo edición/administración) -->
+        <?php if ($registro && $qrImage): ?>
+            <hr>
+            <div style="text-align: center; margin-top: 20px; background: var(--background-alt); padding: 20px; border-radius: 8px;">
+                <h2>Tu Código QR Dinámico</h2>
+                <img src="<?php echo $qrImage; ?>" alt="Código QR" style="border: 4px solid white; padding: 10px; background: white; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                <p><strong>Enlace directo:</strong> <a href="<?php echo $baseUrl . "?id=" . $registro['id']; ?>" target="_blank"><?php echo $baseUrl . "?id=" . $registro['id']; ?></a></p>
+                <p style="font-size: 0.9rem; max-width: 500px; margin: 0 auto; color: #666;">
+                    Imprime este QR o colócalo donde quieras. Cuando la gente lo escanee, verá la información limpia. Si cambias el texto desde este panel, el código QR de arriba seguirá funcionando perfectamente mostrando el nuevo contenido.
+                </p>
+            </div>
+        <?php endif; ?>
+
     <?php endif; ?>
+
 </body>
 </html>
