@@ -121,20 +121,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         <div class="vista-publica">
             <span class="badge-qr">📱 Información Escaneada</span>
-            <h1><?php echo htmlspecialchars($registro['titulo']); ?></h1>
+            <h1>Titulo <?php echo htmlspecialchars($registro['titulo']); ?></h1>
             
             <div class="contenido-texto">
+                Contenido
                 <?php echo htmlspecialchars($registro['contenido']); ?>
             </div>
             
-            <div class="meta-fecha">
-                📅 <strong>Última actualización:</strong> <?php echo date('d/m/Y H:i', strtotime($registro['actualizado_el'])); ?>
-            </div>
-        </div>
-
-        <p style="text-align: center; margin-top: 40px;">
-            <a href="index.php?id=<?php echo $registro['id']; ?>&admin=1" style="font-size: 0.85rem; color: #888;">🔧 Administrar este registro</a>
-        </p>
+            
 
     <!-- CASO 2: VISTA DE ADMINISTRACIÓN (Formulario para crear o editar) -->
     <!-- Se muestra si no hay ID en la URL, o si explícitamente se pide el modo administrador (?admin=1) -->
