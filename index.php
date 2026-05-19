@@ -195,7 +195,6 @@ if ($tab === 'lista' && !$esVistaPublica) {
                                         <img src="<?php echo $qrCelda; ?>" class="qr-mini" alt="QR">
                                     </a>
                                 </td>
-                                <td><?php echo date('d/m/Y H:i', strtotime($reg['actualizado_el'])); ?></td>
                                 <td>
                                     <!-- Botón para mandar el registro a la pestaña de edición -->
                                     <a href="index.php?id=<?php echo $reg['id']; ?>&admin=1&tab=crear" style="color: #0076ff; font-weight: bold; text-decoration: none;">✏️ Editar Contenido</a>
