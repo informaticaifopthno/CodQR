@@ -1,9 +1,9 @@
 <?php
 // 1. Cargar librerías de Composer
 require_once __DIR__ . '/vendor/autoload.php';
-use chillerlan\QRCode\{QRCode, QROptions};
+use chillerlan\QRCode\QRCode;
 
-// 2. Obtener variables de entorno (Render las inyectará de forma segura)
+// 2. Obtener variables de entorno de Render
 $host = getenv('TIDB_HOST') ?: '127.0.0.1';
 $port = getenv('TIDB_PORT') ?: '4000';
 $db   = getenv('TIDB_DB') ?: 'test';
@@ -14,15 +14,13 @@ $pass = getenv('TIDB_PASS') ?: '';
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
 $baseUrl = $protocol . $_SERVER['HTTP_HOST'] . $_SERVER['SCRIPT_NAME'];
 
-// 3. Conexión segura a TiDB Cloud (Obligatorio usar SSL)
-// Cambia la configuración del DSN y opciones para que se vea así:
+// 3. Conexión segura a TiDB Cloud usando tu archivo PEM
 try {
     $dsn = "mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4";
     $options = [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        // Apuntamos directamente al archivo PEM que subiremos al servidor
-        PDO::MYSQL_ATTR_SSL_CA       => __DIR__ . '/isrgrootx1.pem'
+        PDO::MYSQL_ATTR_SSL_CA       => __DIR__ . '/tidb-truststore.pem'
     ];
     $pdo = new PDO($dsn, $user, $pass, $options);
 } catch (PDOException $e) {
@@ -33,8 +31,12 @@ try {
 
 $registro = null;
 $qrImage = null;
+$tab = $_GET['tab'] ?? 'crear'; // Manejo de pestañas del panel: 'crear' o 'lista'
 
-// ACCIÓN A: Ver un registro específico (cuando escanean el QR o seleccionan uno)
+// Caso Especial: El usuario escaneó el QR desde afuera (VISTA PÚBLICA PURA)
+// Si viene un ID pero NO viene el parámetro de administración, es un cliente externo.
+$esVistaPublica = (isset($_GET['id']) && !isset($_GET['admin']));
+
 if (isset($_GET['id'])) {
     $id = (int)$_GET['id'];
     $stmt = $pdo->prepare("SELECT * FROM registros_qr WHERE id = ?");
@@ -42,13 +44,13 @@ if (isset($_GET['id'])) {
     $registro = $stmt->fetch();
     
     if ($registro) {
-        // Generar el código QR dinámico que apunta a este mismo ID
+        // La URL del QR apunta a la vista pública pura (sin el parámetro admin)
         $urlQr = $baseUrl . "?id=" . $registro['id'];
         $qrImage = (new QRCode)->render($urlQr);
     }
 }
 
-// ACCIÓN B: Guardar nuevo o Modificar existente
+// Procesar el Formulario (Guardar / Modificar)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $titulo = $_POST['titulo'] ?? '';
     $contenido = $_POST['contenido'] ?? '';
@@ -59,17 +61,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Actualizar existente
             $stmt = $pdo->prepare("UPDATE registros_qr SET titulo = ?, contenido = ? WHERE id = ?");
             $stmt->execute([$titulo, $contenido, $id]);
-            header("Location: index.php?id=" . $id);
+            header("Location: index.php?id=" . $id . "&admin=1&tab=crear");
             exit;
         } else {
             // Crear nuevo
             $stmt = $pdo->prepare("INSERT INTO registros_qr (titulo, contenido) VALUES (?, ?)");
             $stmt->execute([$titulo, $contenido]);
             $nuevoId = $pdo->lastInsertId();
-            header("Location: index.php?id=" . $nuevoId);
+            header("Location: index.php?id=" . $nuevoId . "&admin=1&tab=crear");
             exit;
         }
     }
+}
+
+// Si la pestaña actual es la 'lista', obtenemos todos los registros de TiDB
+$todosLosRegistros = [];
+if ($tab === 'lista' && !$esVistaPublica) {
+    $stmt = $pdo->query("SELECT * FROM registros_qr ORDER BY actualizado_el DESC");
+    $todosLosRegistros = $stmt->fetchAll();
 }
 ?>
 <!DOCTYPE html>
@@ -77,98 +86,127 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo $registro ? htmlspecialchars($registro['titulo']) : 'Sistema QR'; ?></title>
-    <!-- Usamos un framework CSS minimalista y limpio -->
+    <title><?php echo ($esVistaPublica && $registro) ? htmlspecialchars($registro['titulo']) : 'Panel Administrador QR'; ?></title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
     <style>
-        .vista-publica {
-            background: var(--background-alt);
-            border-left: 5px solid #0076ff;
-            padding: 20px;
-            border-radius: 8px;
-            margin-top: 30px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        .contenido-texto {
-            white-space: pre-wrap; /* Respeta los saltos de línea del usuario */
-            font-size: 1.1rem;
-            line-height: 1.6;
-        }
-        .meta-fecha {
-            font-size: 0.85rem;
-            color: #888;
-            margin-top: 20px;
-            border-top: 1px solid #ddd;
-            padding-top: 10px;
-        }
-        .badge-qr {
-            display: inline-block;
-            background: #e1f5fe;
-            color: #0288d1;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            font-weight: bold;
-            margin-bottom: 15px;
-        }
+        /* Estilos de las pestañas */
+        .nav-tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid var(--border); padding-bottom: 10px; }
+        .nav-tabs a { text-decoration: none; padding: 8px 16px; border-radius: 4px; background: var(--background-alt); font-weight: bold; }
+        .nav-tabs a.active { background: #0076ff; color: white; }
+        
+        /* Estilos de la vista del cliente (QR) */
+        .vista-cliente { background: var(--background-alt); border-left: 6px solid #2ecc71; padding: 25px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-top: 20px; }
+        .contenido-texto { white-space: pre-wrap; font-size: 1.15rem; line-height: 1.6; }
+        .fecha { font-size: 0.85rem; color: #777; margin-top: 25px; border-top: 1px solid var(--border); padding-top: 10px; }
+        
+        /* Tabla del listado */
+        table { width: 100%; margin-top: 10px; }
+        .qr-mini { background: white; padding: 5px; border-radius: 4px; width: 60px; height: 60px; display: block; }
     </style>
 </head>
 <body>
 
-    <!-- CASO 1: VISTA PÚBLICA (El usuario escaneó el QR desde el celular) -->
-    <!-- Detectamos si se pasó un ID por la URL y si no hay intenciones de editar en POST -->
-    <?php if (isset($_GET['id']) && $registro && $_SERVER['REQUEST_METHOD'] !== 'POST'): ?>
-        
-        <div class="vista-publica">
-            <span class="badge-qr">📱 Información Escaneada</span>
-            <h1>Titulo <?php echo htmlspecialchars($registro['titulo']); ?></h1>
-            
-            <div class="contenido-texto">
-                Contenido
-                <?php echo htmlspecialchars($registro['contenido']); ?>
+    <!-- ==================== CASO 1: VISTA PÚBLICA DEL CLIENTE ==================== -->
+    <?php if ($esVistaPublica): ?>
+        <?php if ($registro): ?>
+            <div class="vista-cliente">
+                <h1><?php echo htmlspecialchars($registro['titulo']); ?></h1>
+                <div class="contenido-texto"><?php echo htmlspecialchars($registro['contenido']); ?></div>
+                <div class="fecha">📅 Actualizado el: <?php echo date('d/m/Y H:i', strtotime($registro['actualizado_el'])); ?></div>
             </div>
-            
-            
-
-    <!-- CASO 2: VISTA DE ADMINISTRACIÓN (Formulario para crear o editar) -->
-    <!-- Se muestra si no hay ID en la URL, o si explícitamente se pide el modo administrador (?admin=1) -->
-    <?php else: ?>
-
-        <h1>Panel de Control - QR Dinámico</h1>
-        <p><a href="index.php">➕ Crear Nuevo Registro Completo</a></p>
-        <hr>
-
-        <?php if (isset($_GET['id']) && !$registro): ?>
-            <p style="color: red;">⚠️ El registro solicitado no existe.</p>
+        <?php else: ?>
+            <p style="color: red; text-align: center; margin-top: 50px;">⚠️ El código QR escaneado no pertenece a un registro válido.</p>
         <?php endif; ?>
 
-        <h2><?php echo $registro ? '📝 Editar Registro #' . $registro['id'] : '📥 Crear Nuevo Registro'; ?></h2>
-        
-        <form action="index.php" method="POST">
-            <?php if ($registro): ?>
-                <input type="hidden" name="id" value="<?php echo $registro['id']; ?>">
-            <?php endif; ?>
-            
-            <label>Título del documento:</label>
-            <input type="text" name="titulo" required value="<?php echo $registro ? htmlspecialchars($registro['titulo']) : ''; ?>" placeholder="Ej: Menú del día, Ficha Técnica, Instrucciones...">
-            
-            <label>Contenido / Texto a mostrar:</label>
-            <textarea name="contenido" rows="8" required placeholder="Escribe aquí toda la información que verá el usuario al escanear el QR..." ><?php echo $registro ? htmlspecialchars($registro['contenido']) : ''; ?></textarea>
-            
-            <button type="submit"><?php echo $registro ? 'Guardar Cambios Actualizados' : 'Guardar y Generar QR'; ?></button>
-        </form>
 
-        <!-- PANEL DEL QR (Solo visible en modo edición/administración) -->
-        <?php if ($registro && $qrImage): ?>
-            <hr>
-            <div style="text-align: center; margin-top: 20px; background: var(--background-alt); padding: 20px; border-radius: 8px;">
-                <h2>Tu Código QR Dinámico</h2>
-                <img src="<?php echo $qrImage; ?>" alt="Código QR" style="border: 4px solid white; padding: 10px; background: white; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                <p><strong>Enlace directo:</strong> <a href="<?php echo $baseUrl . "?id=" . $registro['id']; ?>" target="_blank"><?php echo $baseUrl . "?id=" . $registro['id']; ?></a></p>
-                <p style="font-size: 0.9rem; max-width: 500px; margin: 0 auto; color: #666;">
-                    Imprime este QR o colócalo donde quieras. Cuando la gente lo escanee, verá la información limpia. Si cambias el texto desde este panel, el código QR de arriba seguirá funcionando perfectamente mostrando el nuevo contenido.
-                </p>
-            </div>
+    <!-- ==================== CASO 2: PANEL DE ADMINISTRACIÓN ==================== -->
+    <?php else: ?>
+        <h1>⚙️ Panel de Gestión QR Dinámico</h1>
+        
+        <!-- Menú de Pestañas Navegables -->
+        <div class="nav-tabs">
+            <a href="index.php?tab=crear" class="<?php echo $tab === 'crear' ? 'active' : ''; ?>">📥 Crear / Editar QR</a>
+            <a href="index.php?tab=lista" class="<?php echo $tab === 'lista' ? 'active' : ''; ?>">📋 Ver Todos los Códigos</a>
+        </div>
+
+        <!-- CONTENIDO PESTAÑA A: CREAR O EDITAR -->
+        <?php if ($tab === 'crear'): ?>
+            <h2><?php echo $registro ? '📝 Modificar Registro #' . $registro['id'] : '✨ Generar Nueva Información'; ?></h2>
+            
+            <form action="index.php?tab=crear" method="POST">
+                <?php if ($registro): ?>
+                    <input type="hidden" name="id" value="<?php echo $registro['id']; ?>">
+                <?php endif; ?>
+                
+                <label>Título:</label>
+                <input type="text" name="titulo" required value="<?php echo $registro ? htmlspecialchars($registro['titulo']) : ''; ?>" placeholder="Ej: Menú de Almuerzos, Manual de Usuario...">
+                
+                <label>Información / Texto:</label>
+                <textarea name="contenido" rows="6" required placeholder="Ingresa aquí los datos que el usuario leerá al escanear el QR..." ><?php echo $registro ? htmlspecialchars($registro['contenido']) : ''; ?></textarea>
+                
+                <button type="submit"><?php echo $registro ? 'Guardar Cambios' : 'Generar Registro y QR'; ?></button>
+                <?php if ($registro): ?>
+                    <a href="index.php?tab=crear" style="margin-left: 10px; color: #888;">Cancelar Edición</a>
+                <?php endif; ?>
+            </form>
+
+            <!-- Cuadro de visualización inmediata del QR que se acaba de crear/editar -->
+            <?php if ($registro && $qrImage): ?>
+                <div style="text-align: center; margin-top: 35px; background: var(--background-alt); padding: 20px; border-radius: 8px;">
+                    <h3>¡Código QR Listo!</h3>
+                    <img src="<?php echo $qrImage; ?>" alt="QR" style="border: 4px solid white; background: white; padding: 5px; border-radius: 4px;">
+                    <p><strong>Enlace público asignado:</strong><br>
+                       <!-- target="_blank" asegura que se abra en una ventana/pestaña aparte -->
+                       <a href="<?php echo $urlQr; ?>" target="_blank"><?php echo $urlQr; ?> ↗️</a>
+                    </p>
+                    <p style="font-size: 0.85rem; color: #666; max-width: 500px; margin: 0 auto;">
+                        Este QR abrirá la información en una ventana limpia para el usuario. Puedes modificar el texto arriba cuantas veces quieras y los cambios se verán inmediatamente sin cambiar el QR.
+                    </p>
+                </div>
+            <?php endif; ?>
+        <?php endif; ?>
+
+        <!-- CONTENIDO PESTAÑA B: LISTADO GLOBAL DE CÓDIGOS -->
+        <?php if ($tab === 'lista'): ?>
+            <h2>Historial de Códigos Generados</h2>
+            <?php if (empty($todosLosRegistros)): ?>
+                <p>No has generado ningún código QR todavía. ¡Ve a la pestaña "Crear" para empezar!</p>
+            <?php else: ?>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Título</th>
+                            <th>QR (Escanear / Probar)</th>
+                            <th>Última Modificación</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($todosLosRegistros as $reg): 
+                            // Generamos el QR temporal para renderizarlo en la tabla
+                            $enlacePublico = $baseUrl . "?id=" . $reg['id'];
+                            $qrCelda = (new QRCode)->render($enlacePublico);
+                        ?>
+                            <tr>
+                                <td><strong>#<?php echo $reg['id']; ?></strong></td>
+                                <td><?php echo htmlspecialchars($reg['titulo']); ?></td>
+                                <td>
+                                    <!-- Al hacer clic en el QR de la tabla también se abre en otra pestaña limpia -->
+                                    <a href="<?php echo $enlacePublico; ?>" target="_blank" title="Ver vista del cliente">
+                                        <img src="<?php echo $qrCelda; ?>" class="qr-mini" alt="QR">
+                                    </a>
+                                </td>
+                                <td><?php echo date('d/m/Y H:i', strtotime($reg['actualizado_el'])); ?></td>
+                                <td>
+                                    <!-- Botón para mandar el registro a la pestaña de edición -->
+                                    <a href="index.php?id=<?php echo $reg['id']; ?>&admin=1&tab=crear" style="color: #0076ff; font-weight: bold; text-decoration: none;">✏️ Editar Contenido</a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
         <?php endif; ?>
 
     <?php endif; ?>
