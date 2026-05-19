@@ -130,7 +130,7 @@ if ($tab === 'lista' && !$esVistaPublica) {
 
         <!-- CONTENIDO PESTAÑA A: CREAR O EDITAR -->
         <?php if ($tab === 'crear'): ?>
-            <h2><?php echo $registro ? '📝 Modificar Registro #' . $registro['id'] : '✨ Generar Nueva Información'; ?></h2>
+            <h2><?php echo $registro ? '📝 Modificar Registro #' . $registro['id'] : '✨ Generar Nueva Codigo'; ?></h2>
             
             <form action="index.php?tab=crear" method="POST">
                 <?php if ($registro): ?>
@@ -138,7 +138,7 @@ if ($tab === 'lista' && !$esVistaPublica) {
                 <?php endif; ?>
                 
                 <label>Título:</label>
-                <input type="text" name="titulo" required value="<?php echo $registro ? htmlspecialchars($registro['titulo']) : ''; ?>" placeholder="Ej: Menú de Almuerzos, Manual de Usuario...">
+                <input type="text" name="titulo" required value="<?php echo $registro ? htmlspecialchars($registro['titulo']) : ''; ?>" placeholder="">
                 
                 <label>Información / Texto:</label>
                 <textarea name="contenido" rows="6" required placeholder="Ingresa aquí los datos que el usuario leerá al escanear el QR..." ><?php echo $registro ? htmlspecialchars($registro['contenido']) : ''; ?></textarea>
