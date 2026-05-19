@@ -20,7 +20,7 @@ try {
     $options = [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::MYSQL_ATTR_SSL_CA       => __DIR__ . '/tidb-truststore.pem'
+        PDO::MYSQL_ATTR_SSL_CA       => __DIR__ . '/isrgrootx1.pem'
     ];
     $pdo = new PDO($dsn, $user, $pass, $options);
 } catch (PDOException $e) {
