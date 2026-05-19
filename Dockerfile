@@ -22,7 +22,7 @@ COPY . /var/www/html/
 RUN composer install --no-interaction --optimize-autoloader
 
 # 7. Asegurar los permisos correctos para que Apache lea los archivos
-RUN chown -W -R www-data:www-data /var/www/html/
+RUN chown -R www-data:www-data /var/www/html/
 
 # 8. Render expone un puerto dinámico mediante la variable $PORT
 CMD sed -i 's/Listen 80/Listen '"${PORT:-80}"'/g' /etc/apache2/ports.conf && apache2-foreground
