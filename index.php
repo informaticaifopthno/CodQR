@@ -120,7 +120,7 @@ if ($tab === 'lista' && !$esVistaPublica) {
 
     <!-- ==================== CASO 2: PANEL DE ADMINISTRACIÓN ==================== -->
     <?php else: ?>
-        <h1>⚙️ Panel de Gestión QR Dinámico</h1>
+        <h1>⚙️ Panel de Gestión QR</h1>
         
         <!-- Menú de Pestañas Navegables -->
         <div class="nav-tabs">
@@ -130,7 +130,7 @@ if ($tab === 'lista' && !$esVistaPublica) {
 
         <!-- CONTENIDO PESTAÑA A: CREAR O EDITAR -->
         <?php if ($tab === 'crear'): ?>
-            <h2><?php echo $registro ? '📝 Modificar Registro #' . $registro['id'] : '✨ Generar Nueva Codigo'; ?></h2>
+            <h2><?php echo $registro ? '📝 Modificar Registro #' . $registro['id'] : '✨ Generar Nuevo Codigo'; ?></h2>
             
             <form action="index.php?tab=crear" method="POST">
                 <?php if ($registro): ?>
