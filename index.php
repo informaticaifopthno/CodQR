@@ -15,13 +15,14 @@ $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https:
 $baseUrl = $protocol . $_SERVER['HTTP_HOST'] . $_SERVER['SCRIPT_NAME'];
 
 // 3. Conexión segura a TiDB Cloud (Obligatorio usar SSL)
+// Cambia la configuración del DSN y opciones para que se vea así:
 try {
     $dsn = "mysql:host=$host;port=$port;dbname=$db;charset=utf8mb4";
     $options = [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        // TiDB Cloud requiere SSL. En producción con PHP, habilitamos la verificación.
-        PDO::MYSQL_ATTR_SSL_CA       => true 
+        // Apuntamos directamente al archivo PEM que subiremos al servidor
+        PDO::MYSQL_ATTR_SSL_CA       => __DIR__ . '/isrgrootx1.pem'
     ];
     $pdo = new PDO($dsn, $user, $pass, $options);
 } catch (PDOException $e) {
